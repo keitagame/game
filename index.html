@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>出来れば一致してほしいゲーム</title>
+  <style>
+    :root {
+      --primary: #6366f1;
+      --primary-hover: #4f46e5;
+      --bg: #f8fafc;
+      --card-bg: #ffffff;
+      --text: #1e293b;
+      --text-muted: #64748b;
+      --border: #e2e8f0;
+      --accent: #f59e0b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif, 'Hiragino Sans', 'Meiryo';
+      background-color: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 20px;
+    }
+
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      color: var(--primary);
+    }
+
+    .card {
+      background: var(--card-bg);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+      border: 1px solid var(--border);
+    }
+
+    /* 参加・コントロールエリア */
+    .top-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .top-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .input-group {
+      display: flex;
+      gap: 8px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      border-color: var(--primary);
+    }
+
+    button {
+      padding: 10px 18px;
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background-color 0.2s;
+      white-space: nowrap;
+    }
+
+    button:hover:not(:disabled) {
+      background-color: var(--primary-hover);
+    }
+
+    button:disabled {
+      background-color: #cbd5e1;
+      cursor: not-allowed;
+    }
+
+    .game-status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .status-info {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+    }
+
+    .status-info b {
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    /* お題表示エリア */
+    .prompt-card {
+      text-align: center;
+      background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+      color: white;
+      padding: 24px;
+    }
+
+    .prompt-label {
+      font-size: 0.85rem;
+      opacity: 0.9;
+      margin-bottom: 6px;
+      letter-spacing: 1px;
+    }
+
+    .prompt-title {
+      font-size: 1.8rem;
+      font-weight: bold;
+      word-break: break-all;
+    }
+
+    /* 出題・回答エリア */
+    .action-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .action-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: bold;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    /* 下部：プレイヤー＆ログ */
+    .bottom-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 600px) {
+      .bottom-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .player-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .player-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 12px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 0.9rem;
+    }
+
+    .player-info {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .status-badge {
+      font-size: 0.75rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: bold;
+    }
+
+    .badge-answered { background: #d1fae5; color: #065f46; }
+    .badge-thinking { background: #fef3c7; color: #92400e; }
+    .badge-out { background: #fee2e2; color: #991b1b; }
+    .badge-giver { background: #e0e7ff; color: #3730a3; }
+
+    /* ログエリア */
+    pre#log {
+      background: #1e293b;
+      color: #f1f5f9;
+      font-family: monospace;
+      font-size: 0.85rem;
+      padding: 12px;
+      border-radius: 8px;
+      height: 180px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <header>
+      <h1>出来れば一致してほしいゲーム</h1>
+    </header>
+
+    <!-- 上部：プレイヤー参加 ＆ ゲーム管理 -->
+    <div class="top-grid">
+      <div class="card">
+        <div class="section-title">プレイヤー参加</div>
+        <div class="input-group">
+          <input type="text" id="username" placeholder="プレイヤー名を入力">
+          <button onclick="joinGame()">参加</button>
+        </div>
+      </div>
+
+      <div class="card game-status-bar">
+        <div class="status-info">
+          フェーズ: <b id="phase">-</b><br>
+          ラウンド: <b id="round">-</b>
+        </div>
+        <button id="start-btn" onclick="startGame()" disabled>ゲーム開始</button>
+      </div>
+    </div>
+
+    <!-- お題表示部分 -->
+    <div class="card prompt-card">
+      <div class="prompt-label">現在の課題 / お題</div>
+      <div class="prompt-title"><b id="prompt-display">-</b></div>
+    </div>
+
+    <!-- お題・回答 入力エリア -->
+    <div class="action-grid">
+      <div class="card">
+        <div class="section-title">お題作成（出題者用）</div>
+        <div class="input-group">
+          <input type="text" id="prompt-input" placeholder="お題を入力">
+          <button onclick="submitPrompt()">送信</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="section-title">回答入力</div>
+        <div class="input-group">
+          <input type="text" id="answer-input" placeholder="回答を入力">
+          <button onclick="submitAnswer()">送信</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下部：ステータス ＆ ログ -->
+    <div class="bottom-grid">
+      <div class="card">
+        <div class="section-title">ステータス</div>
+        <ul id="player-list" class="player-list"></ul>
+      </div>
+
+      <div class="card">
+        <div class="section-title">ゲームログ</div>
+        <pre id="log"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const ws = new WebSocket('ws://' + location.hostname + ':8080');
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      if (data.type === 'init') return;
+
+      if (data.type === 'state') {
+        document.getElementById('phase').textContent = data.phase;
+        document.getElementById('round').textContent = data.round;
+        document.getElementById('prompt-display').textContent = data.prompt || '(未設定)';
+
+        const list = document.getElementById('player-list');
+        list.innerHTML = '';
+        data.players.forEach(p => {
+          const li = document.createElement('li');
+          li.className = 'player-item';
+
+          // 状態バッジの設定
+          let statusBadge = '';
+          if (!p.active) {
+            statusBadge = '<span class="status-badge badge-out">脱落</span>';
+          } else if (p.answered) {
+            statusBadge = '<span class="status-badge badge-answered">入力済</span>';
+          } else {
+            statusBadge = '<span class="status-badge badge-thinking">入力中</span>';
+          }
+
+          const giverBadge = p.id === data.prompt_giver_id 
+            ? '<span class="status-badge badge-giver">★出題者</span>' 
+            : '';
+
+          li.innerHTML = `
+            <div class="player-info">
+              <span><strong>${p.name || 'ゲスト'}</strong></span>
+              ${giverBadge}
+            </div>
+            <div>
+              <span style="margin-right: 8px; font-weight: bold;">${p.score}pt</span>
+              ${statusBadge}
+            </div>
+          `;
+          list.appendChild(li);
+        });
+
+        const activeCount = data.players.filter(p => p.active && p.name !== '').length;
+        document.getElementById('start-btn').disabled = !(data.phase === 'lobby' && activeCount >= 2);
+
+        if (data.log) {
+          const logElem = document.getElementById('log');
+          logElem.textContent += data.log + '\n----------------\n';
+          // ログを最下部に自動スクロール
+          logElem.scrollTop = logElem.scrollHeight;
+        }
+      }
+    };
+
+    function joinGame() {
+      const name = document.getElementById('username').value;
+      ws.send(JSON.stringify({ action: 'join', name: name }));
+    }
+
+    function startGame() {
+      ws.send(JSON.stringify({ action: 'start' }));
+    }
+
+    function submitPrompt() {
+      const prompt = document.getElementById('prompt-input').value;
+      ws.send(JSON.stringify({ action: 'submit_prompt', prompt: prompt }));
+      document.getElementById('prompt-input').value = '';
+    }
+
+    function submitAnswer() {
+      const answer = document.getElementById('answer-input').value;
+      ws.send(JSON.stringify({ action: 'submit_answer', answer: answer }));
+      document.getElementById('answer-input').value = '';
+    }
+  </script>
+</body>
+</html>
