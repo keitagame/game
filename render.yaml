@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ittigame
+    plan: free
+    runtime: ruby
+    buildCommand: gem install em-websocket
+    startCommand: ruby server.rb
