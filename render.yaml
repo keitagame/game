@@ -3,5 +3,5 @@ services:
     name: ittigame
     plan: free
     runtime: ruby
-    buildCommand: gem install em-websocket
+    buildCommand: gem install em-websocket base64
     startCommand: ruby server.rb
