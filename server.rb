@@ -56,11 +56,11 @@ end
 # --- 3. イベントループ起動 ---
 EM.run do
   # HTTP サーバ起動 (ポート 8000)
-  EM.start_server "10.18.93.116", 8000, HttpHandler
+  EM.start_server "0.0.0.0", 8000, HttpHandler
   puts "HTTP サーバが起動しました: http://localhost:8000/"
 
   # WebSocket サーバ起動 (ポート 8080)
-  EM::WebSocket.run(host: "10.18.93.116", port: 8080) do |ws|
+  EM::WebSocket.run(host: "0.0.0.0", port: 8080) do |ws|
     ws.onopen do
       clients[ws] = { id: ws.object_id, name: '', score: 0, active: true, answer: nil }
       ws.send({ type: 'init', id: ws.object_id }.to_json)
