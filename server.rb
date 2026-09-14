@@ -60,7 +60,7 @@ EM.run do
   puts "HTTP サーバが起動しました: http://localhost:8000/"
 
   # WebSocket サーバ起動 (ポート 8080)
-  EM::WebSocket.run(host: "0.0.0.0", port: 8080) do |ws|
+  EM::WebSocket.run(host: "0.0.0.0", port: 8000) do |ws|
     ws.onopen do
       clients[ws] = { id: ws.object_id, name: '', score: 0, active: true, answer: nil }
       ws.send({ type: 'init', id: ws.object_id }.to_json)
