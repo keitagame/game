@@ -14,6 +14,9 @@
       --text-muted: #64748b;
       --border: #e2e8f0;
       --accent: #ef4444;
+      --danger: #dc2626;
+      --danger-hover: #b91c1c;
+      --secondary: #64748b;
     }
 
     * {
@@ -107,6 +110,18 @@
     button:disabled {
       background-color: #cbd5e1;
       cursor: not-allowed;
+    }
+
+    button.btn-danger {
+      background-color: var(--danger);
+    }
+
+    button.btn-danger:hover:not(:disabled) {
+      background-color: var(--danger-hover);
+    }
+
+    button.btn-secondary {
+      background-color: var(--secondary);
     }
 
     .game-status-bar {
@@ -301,7 +316,8 @@
         <div class="section-title">プレイヤー参加</div>
         <div class="input-group">
           <input type="text" id="username" placeholder="プレイヤー名を入力">
-          <button onclick="joinGame()">参加</button>
+          <button id="join-btn" onclick="joinGame()">参加</button>
+          <button id="leave-btn" class="btn-danger" onclick="leaveGame()" disabled>退室</button>
         </div>
       </div>
 
@@ -314,7 +330,10 @@
           <span class="timer-label">残り時間</span>
           <span id="timer-display" class="timer-value">--</span>
         </div>
-        <button id="start-btn" onclick="startGame()" disabled>ゲーム開始</button>
+        <div style="display: flex; flex-direction: column; gap: 4px;">
+          <button id="start-btn" onclick="startGame()" disabled>ゲーム開始</button>
+          <button class="btn-secondary" onclick="resetRoom()" style="font-size: 0.75rem; padding: 4px 8px;">リセット</button>
+        </div>
       </div>
     </div>
 
@@ -409,8 +428,9 @@
     let latestPlayers = {};
     let lastLogSeq = -1;
 
+    // タブ閉じ・切断時にプレイヤーレコード自体を完全削除
     function armDisconnectHook() {
-      db.ref('players/' + myPlayerId).onDisconnect().update({ active: false });
+      db.ref('players/' + myPlayerId).onDisconnect().remove();
     }
 
     gameRef.transaction(current => {
@@ -440,7 +460,6 @@
       maybeActAsJudge();
     });
 
-    // --- チャット受信処理 ---
     chatRef.limitToLast(50).on('child_added', snapshot => {
       const msg = snapshot.val();
       if (!msg) return;
@@ -463,7 +482,6 @@
       container.scrollTop = container.scrollHeight;
     });
 
-    // --- チャット送信処理 ---
     function sendChatMessage() {
       const input = document.getElementById('chat-input');
       const text = input.value.trim();
@@ -555,6 +573,10 @@
         list.appendChild(li);
       });
 
+      const isJoined = !!latestPlayers[myPlayerId];
+      document.getElementById('join-btn').disabled = isJoined;
+      document.getElementById('leave-btn').disabled = !isJoined;
+
       const activeCount = players.filter(p => p.active && p.name).length;
       document.getElementById('start-btn').disabled = !(latestGame.phase === 'lobby' && activeCount >= 2);
 
@@ -596,17 +618,54 @@
       });
     }
 
+    // 手動で退室する処理
+    function leaveGame() {
+      const me = latestPlayers[myPlayerId];
+      const name = me ? me.name : 'プレイヤー';
+      db.ref('players/' + myPlayerId).remove().then(() => {
+        appendLog(name + ' が退室しました。');
+      });
+    }
+
+    // 詰まったとき用のルーム初期化処理
+    function resetRoom() {
+      if (!confirm('部屋の状態とプレイヤー一覧をリセットしますか？')) return;
+      
+      const updates = {};
+      updates['game'] = {
+        phase: 'lobby',
+        round: 0,
+        prompt: '',
+        promptGiverId: null,
+        endTime: 0,
+        log: 'ルームがリセットされました。',
+        logSeq: ((latestGame && latestGame.logSeq) || 0) + 1
+      };
+      updates['players'] = null;
+
+      db.ref().update(updates);
+    }
+
     function startGame() {
       const players = playersArray();
       const eligible = players.filter(p => p.name);
       if (latestGame.phase !== 'lobby' || eligible.length < 2) return;
 
       const updates = {};
+
+      // 非アクティブ（切断済み等）のプレイヤーを削除
+      players.forEach(p => {
+        if (!p.active) {
+          updates['players/' + p.id] = null;
+        }
+      });
+
       eligible.forEach(p => {
         updates['players/' + p.id + '/score'] = 0;
         updates['players/' + p.id + '/active'] = true;
         updates['players/' + p.id + '/answer'] = null;
       });
+
       updates['game/round'] = 1;
       updates['game/phase'] = 'prompt';
       updates['game/promptGiverId'] = eligible[0].id;
