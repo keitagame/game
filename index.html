@@ -307,16 +307,14 @@
     const db = firebase.database();
 
     // --- 自分のプレイヤーID（認証なしなのでlocalStorageで永続化） ---
-    // --- 自分のプレイヤーID（タブごとに独立させるためsessionStorageに変更） ---
-function getOrCreatePlayerId() {
-  let id = sessionStorage.getItem('kusogeee_player_id');
-  if (!id) {
-    id = 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
-    sessionStorage.setItem('kusogeee_player_id', id);
-  }
-  return id;
-}
-
+    function getOrCreatePlayerId() {
+      let id = localStorage.getItem('kusogeee_player_id');
+      if (!id) {
+        id = 'p_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
+        localStorage.setItem('kusogeee_player_id', id);
+      }
+      return id;
+    }
     const myPlayerId = getOrCreatePlayerId();
 
     const gameRef = db.ref('game');
