@@ -13,7 +13,7 @@
       --text: #1e293b;
       --text-muted: #64748b;
       --border: #e2e8f0;
-      --accent: #f59e0b;
+      --accent: #ef4444;
     }
 
     * {
@@ -31,7 +31,7 @@
     }
 
     .container {
-      max-width: 800px;
+      max-width: 900px;
       margin: 0 auto;
       display: flex;
       flex-direction: column;
@@ -126,6 +126,37 @@
       font-size: 1rem;
     }
 
+    .timer-box {
+      text-align: center;
+      background: #f1f5f9;
+      padding: 6px 12px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+
+    .timer-label {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      display: block;
+    }
+
+    .timer-value {
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: var(--primary);
+    }
+
+    .timer-value.warning {
+      color: var(--accent);
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+      0% { opacity: 1; }
+      50% { opacity: 0.4; }
+      100% { opacity: 1; }
+    }
+
     .prompt-card {
       text-align: center;
       background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
@@ -167,11 +198,11 @@
 
     .bottom-grid {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: 1fr 1fr 1fr;
       gap: 16px;
     }
 
-    @media (max-width: 600px) {
+    @media (max-width: 768px) {
       .bottom-grid {
         grid-template-columns: 1fr;
       }
@@ -225,6 +256,37 @@
       white-space: pre-wrap;
       word-break: break-all;
     }
+
+    .chat-messages {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      height: 130px;
+      overflow-y: auto;
+      padding: 8px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 8px;
+    }
+
+    .chat-item {
+      font-size: 0.85rem;
+      word-break: break-all;
+      line-height: 1.3;
+    }
+
+    .chat-author {
+      font-weight: bold;
+      color: var(--primary);
+      margin-right: 4px;
+    }
+
+    .chat-time {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      margin-left: 6px;
+    }
   </style>
 </head>
 <body>
@@ -248,6 +310,10 @@
           フェーズ: <b id="phase">-</b><br>
           ラウンド: <b id="round">-</b>
         </div>
+        <div class="timer-box">
+          <span class="timer-label">残り時間</span>
+          <span id="timer-display" class="timer-value">--</span>
+        </div>
         <button id="start-btn" onclick="startGame()" disabled>ゲーム開始</button>
       </div>
     </div>
@@ -262,7 +328,7 @@
         <div class="section-title">お題作成（出題者用）</div>
         <div class="input-group">
           <input type="text" id="prompt-input" placeholder="お題を入力">
-          <button onclick="submitPrompt()">送信</button>
+          <button id="prompt-btn" onclick="submitPrompt()">送信</button>
         </div>
       </div>
 
@@ -270,7 +336,7 @@
         <div class="section-title">回答入力</div>
         <div class="input-group">
           <input type="text" id="answer-input" placeholder="回答を入力">
-          <button onclick="submitAnswer()">送信</button>
+          <button id="answer-btn" onclick="submitAnswer()">送信</button>
         </div>
       </div>
     </div>
@@ -285,15 +351,34 @@
         <div class="section-title">ゲームログ</div>
         <pre id="log"></pre>
       </div>
+
+      <div class="card">
+        <div class="section-title">チャット</div>
+        <div id="chat-messages" class="chat-messages"></div>
+        <div class="input-group">
+          <input type="text" id="chat-input" placeholder="メッセージを入力" onkeypress="handleChatKeyPress(event)">
+          <button onclick="sendChatMessage()">送信</button>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Firebase SDK (compat版: script タグで手軽に使えるため採用) -->
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-database-compat.js"></script>
 
   <script>
-    // --- Firebase 初期化 ---
+    const TIME_LIMIT_PROMPT = 20;
+    const TIME_LIMIT_ANSWER = 25;
+
+    const DEFAULT_PROMPTS = [
+      "赤い食べ物といえば？",
+      "コンビニでついつい買ってしまうものは？",
+      "定番の味噌汁の具といえば？",
+      "人気のある冬のスポーツといえば？",
+      "ジブリ映画といえば？",
+      "無人島に持っていくなら？"
+    ];
+
     const firebaseConfig = {
       apiKey: "AIzaSyBOzwMVhNaLCdXgDDounnD7_9y3232Mmjc",
       authDomain: "kusogeee-3fe4f.firebaseapp.com",
@@ -306,7 +391,6 @@
     firebase.initializeApp(firebaseConfig);
     const db = firebase.database();
 
-    // --- 自分のプレイヤーID（認証なしなのでlocalStorageで永続化） ---
     function getOrCreatePlayerId() {
       let id = localStorage.getItem('kusogeee_player_id');
       if (!id) {
@@ -319,18 +403,16 @@
 
     const gameRef = db.ref('game');
     const playersRef = db.ref('players');
+    const chatRef = db.ref('chat');
 
     let latestGame = null;
     let latestPlayers = {};
     let lastLogSeq = -1;
-    let hasJoined = false;
 
-    // 自分の接続が切れたら active=false にする（onDisconnect）
     function armDisconnectHook() {
       db.ref('players/' + myPlayerId).onDisconnect().update({ active: false });
     }
 
-    // --- ゲーム初期状態を（存在しなければ）作成 ---
     gameRef.transaction(current => {
       if (current === null) {
         return {
@@ -338,14 +420,14 @@
           round: 0,
           prompt: '',
           promptGiverId: null,
+          endTime: 0,
           log: '',
           logSeq: 0
         };
       }
-      return current; // 既にあれば変更しない
+      return current;
     });
 
-    // --- 状態購読 ---
     gameRef.on('value', snap => {
       latestGame = snap.val() || {};
       render();
@@ -357,6 +439,78 @@
       render();
       maybeActAsJudge();
     });
+
+    // --- チャット受信処理 ---
+    chatRef.limitToLast(50).on('child_added', snapshot => {
+      const msg = snapshot.val();
+      if (!msg) return;
+
+      const container = document.getElementById('chat-messages');
+      const div = document.createElement('div');
+      div.className = 'chat-item';
+
+      const timeStr = msg.timestamp
+        ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : '';
+
+      div.innerHTML = `
+        <span class="chat-author">${escapeHtml(msg.senderName)}:</span>
+        <span>${escapeHtml(msg.text)}</span>
+        <span class="chat-time">${timeStr}</span>
+      `;
+
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+    });
+
+    // --- チャット送信処理 ---
+    function sendChatMessage() {
+      const input = document.getElementById('chat-input');
+      const text = input.value.trim();
+      if (!text) return;
+
+      const me = latestPlayers[myPlayerId];
+      const senderName = (me && me.name) ? me.name : 'ゲスト';
+
+      chatRef.push({
+        senderName: senderName,
+        text: text,
+        timestamp: firebase.database.ServerValue.TIMESTAMP
+      }).then(() => {
+        input.value = '';
+      });
+    }
+
+    function handleChatKeyPress(e) {
+      if (e.key === 'Enter') {
+        sendChatMessage();
+      }
+    }
+
+    setInterval(() => {
+      if (!latestGame || !latestGame.endTime || latestGame.phase === 'lobby' || latestGame.phase === 'game_over') {
+        document.getElementById('timer-display').textContent = '--';
+        document.getElementById('timer-display').classList.remove('warning');
+        return;
+      }
+
+      const now = Date.now();
+      const remainMs = Math.max(0, latestGame.endTime - now);
+      const remainSec = Math.ceil(remainMs / 1000);
+
+      const timerElem = document.getElementById('timer-display');
+      timerElem.textContent = remainSec + 's';
+
+      if (remainSec <= 5) {
+        timerElem.classList.add('warning');
+      } else {
+        timerElem.classList.remove('warning');
+      }
+
+      if (remainMs <= 0) {
+        maybeHandleTimeout();
+      }
+    }, 250);
 
     function playersArray() {
       return Object.keys(latestPlayers).map(id => ({ id, ...latestPlayers[id] }));
@@ -404,6 +558,16 @@
       const activeCount = players.filter(p => p.active && p.name).length;
       document.getElementById('start-btn').disabled = !(latestGame.phase === 'lobby' && activeCount >= 2);
 
+      const isPromptGiver = latestGame.promptGiverId === myPlayerId;
+      const me = latestPlayers[myPlayerId];
+      const isMyTurnAnswer = me && me.active && (me.answer === null || me.answer === undefined);
+
+      document.getElementById('prompt-btn').disabled = !(latestGame.phase === 'prompt' && isPromptGiver);
+      document.getElementById('prompt-input').disabled = !(latestGame.phase === 'prompt' && isPromptGiver);
+      
+      document.getElementById('answer-btn').disabled = !(latestGame.phase === 'answer' && isMyTurnAnswer);
+      document.getElementById('answer-input').disabled = !(latestGame.phase === 'answer' && isMyTurnAnswer);
+
       if (typeof latestGame.logSeq === 'number' && latestGame.logSeq !== lastLogSeq && latestGame.log) {
         lastLogSeq = latestGame.logSeq;
         const logElem = document.getElementById('log');
@@ -418,7 +582,6 @@
       return div.innerHTML;
     }
 
-    // --- アクション: 参加 ---
     function joinGame() {
       const name = document.getElementById('username').value.trim();
       const finalName = name || ('Player_' + myPlayerId.slice(-4));
@@ -428,13 +591,11 @@
         active: true,
         answer: null
       }).then(() => {
-        hasJoined = true;
         armDisconnectHook();
         appendLog(finalName + ' が参加しました。');
       });
     }
 
-    // --- アクション: ゲーム開始 ---
     function startGame() {
       const players = playersArray();
       const eligible = players.filter(p => p.name);
@@ -450,44 +611,44 @@
       updates['game/phase'] = 'prompt';
       updates['game/promptGiverId'] = eligible[0].id;
       updates['game/prompt'] = '';
+      updates['game/endTime'] = Date.now() + (TIME_LIMIT_PROMPT * 1000);
       bumpLog(updates, 'ゲームを開始します！第1ラウンド開始。');
 
       db.ref().update(updates);
     }
 
-    // --- アクション: お題送信 ---
     function submitPrompt() {
-      const promptText = document.getElementById('prompt-input').value;
+      const promptText = document.getElementById('prompt-input').value.trim();
       if (!latestGame || latestGame.phase !== 'prompt' || latestGame.promptGiverId !== myPlayerId) return;
 
+      const finalPrompt = promptText || DEFAULT_PROMPTS[Math.floor(Math.random() * DEFAULT_PROMPTS.length)];
+
       const updates = {};
-      updates['game/prompt'] = promptText;
+      updates['game/prompt'] = finalPrompt;
       updates['game/phase'] = 'answer';
+      updates['game/endTime'] = Date.now() + (TIME_LIMIT_ANSWER * 1000);
       playersArray().forEach(p => {
         updates['players/' + p.id + '/answer'] = null;
       });
-      bumpLog(updates, `お題: 「${promptText}」 が設定されました！回答を入力してください。`);
+      bumpLog(updates, `お題: 「${finalPrompt}」 が設定されました！回答を入力してください。`);
 
       db.ref().update(updates);
       document.getElementById('prompt-input').value = '';
     }
 
-    // --- アクション: 回答送信 ---
     function submitAnswer() {
-      const answerText = document.getElementById('answer-input').value.trim();
+      const answerText = document.getElementById('answer-input').value.trim() || '(無回答)';
       const me = latestPlayers[myPlayerId];
       if (!latestGame || latestGame.phase !== 'answer' || !me || !me.active) return;
       if (me.answer !== null && me.answer !== undefined) return;
 
       db.ref('players/' + myPlayerId + '/answer').set(answerText).then(() => {
         appendLog(`${me.name} が回答を送信しました。`);
-        // 自分が回答したタイミングでも判定トリガーを試みる
         setTimeout(maybeActAsJudge, 300);
       });
       document.getElementById('answer-input').value = '';
     }
 
-    // --- ログ用ヘルパー ---
     function bumpLog(updates, message) {
       const nextSeq = ((latestGame && latestGame.logSeq) || 0) + 1;
       updates['game/log'] = message;
@@ -499,30 +660,60 @@
       db.ref('game').update({ log: message, logSeq: nextSeq });
     }
 
-    // --- 審判ロジック ---
-    // 出題者クライアントが「全員回答済み」を検知したら集計してRTDBに反映する。
-    // 出題者が非アクティブ(離脱)な場合は、アクティブなプレイヤーの中でIDが
-    // 最小の人が代理で審判する（多重実行を避けるための簡易フェイルセーフ）。
-    let judging = false;
-    function maybeActAsJudge() {
-      if (!latestGame || latestGame.phase !== 'answer') return;
-      if (judging) return;
+    function maybeHandleTimeout() {
+      if (!latestGame || Date.now() < latestGame.endTime) return;
+      if (!isPrimaryJudge()) return;
 
-      const players = playersArray();
-      const actives = players.filter(p => p.active);
-      if (actives.length === 0) return;
+      if (latestGame.phase === 'prompt') {
+        const randomPrompt = DEFAULT_PROMPTS[Math.floor(Math.random() * DEFAULT_PROMPTS.length)];
+        const updates = {};
+        updates['game/prompt'] = randomPrompt;
+        updates['game/phase'] = 'answer';
+        updates['game/endTime'] = Date.now() + (TIME_LIMIT_ANSWER * 1000);
+        playersArray().forEach(p => {
+          updates['players/' + p.id + '/answer'] = null;
+        });
+        bumpLog(updates, `⏰ 制限時間切れ！自動お題: 「${randomPrompt}」 が設定されました！`);
+        db.ref().update(updates);
+      } else if (latestGame.phase === 'answer') {
+        maybeActAsJudge(true);
+      }
+    }
+
+    function isPrimaryJudge() {
+      const actives = playersArray().filter(p => p.active);
+      if (actives.length === 0) return false;
 
       const giverIsActive = actives.some(p => p.id === latestGame.promptGiverId);
       const judgeId = giverIsActive
         ? latestGame.promptGiverId
         : actives.slice().sort((a, b) => a.id.localeCompare(b.id))[0].id;
 
-      if (judgeId !== myPlayerId) return;
+      return judgeId === myPlayerId;
+    }
+
+    let judging = false;
+    function maybeActAsJudge(forceTimeout = false) {
+      if (!latestGame || latestGame.phase !== 'answer') return;
+      if (judging) return;
+      if (!isPrimaryJudge()) return;
+
+      const actives = playersArray().filter(p => p.active);
+      if (actives.length === 0) return;
 
       const allAnswered = actives.every(p => p.answer !== null && p.answer !== undefined);
-      if (!allAnswered) return;
+      if (!allAnswered && !forceTimeout) return;
 
       judging = true;
+
+      if (forceTimeout && !allAnswered) {
+        actives.forEach(p => {
+          if (p.answer === null || p.answer === undefined) {
+            p.answer = '(時間切れ)';
+          }
+        });
+      }
+
       runJudgement(actives).finally(() => { judging = false; });
     }
 
@@ -530,14 +721,16 @@
       const counts = {};
       actives.forEach(p => {
         const key = (p.answer || '').toLowerCase();
-        counts[key] = (counts[key] || 0) + 1;
+        if (key && key !== '(時間切れ)') {
+          counts[key] = (counts[key] || 0) + 1;
+        }
       });
 
       const scoredNames = [];
       const updates = {};
       actives.forEach(p => {
         const key = (p.answer || '').toLowerCase();
-        if (counts[key] >= 2) {
+        if (key && key !== '(時間切れ)' && counts[key] >= 2) {
           updates['players/' + p.id + '/score'] = (p.score || 0) + 1;
           scoredNames.push(p.name);
         }
@@ -549,7 +742,6 @@
         ? '一致した人はいませんでした。\n'
         : `一致してポイント獲得(+1pt): ${scoredNames.join(', ')}\n`;
 
-      // スコア更新後の見込み値でスナップショットを作り、脱落・勝敗判定に使う
       const projected = actives.map(p => ({
         ...p,
         score: updates['players/' + p.id + '/score'] !== undefined
@@ -559,7 +751,6 @@
 
       const currentRound = latestGame.round || 1;
 
-      // 5ラウンドごとに最下位脱落
       if (currentRound % 5 === 0 && projected.length > 1) {
         const minScore = Math.min(...projected.map(p => p.score));
         const lowest = projected.filter(p => p.score === minScore);
@@ -569,7 +760,6 @@
         }
       }
 
-      // 脱落後の残存者を算出
       const eliminatedIds = new Set(
         Object.keys(updates)
           .filter(k => k.endsWith('/active') && updates[k] === false)
@@ -579,8 +769,9 @@
 
       if (remaining.length <= 1) {
         updates['game/phase'] = 'game_over';
+        updates['game/endTime'] = 0;
         const winner = remaining[0] ? remaining[0].name : '該当者なし';
-        log += `\n【ゲーム終了】独り勝ち者: ${winner}！`;
+        log += `\n【ゲーム終了】勝者: ${winner}！`;
       } else {
         const nextRound = currentRound + 1;
         const nextGiver = remaining[(nextRound - 1) % remaining.length];
@@ -588,6 +779,7 @@
         updates['game/phase'] = 'prompt';
         updates['game/promptGiverId'] = nextGiver.id;
         updates['game/prompt'] = '';
+        updates['game/endTime'] = Date.now() + (TIME_LIMIT_PROMPT * 1000);
       }
 
       bumpLog(updates, log);
